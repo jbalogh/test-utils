@@ -12,7 +12,7 @@ from fabric.contrib.project import rsync_project
 
 NAME = os.path.basename(os.path.dirname(__file__))
 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'example-settings'
+os.environ['DJANGO_SETTINGS_MODULE'] = 'example-project.settings'
 os.environ['PYTHONPATH'] = os.path.abspath(os.path.dirname(__file__))
 
 env.hosts = ['jbalogh.me']
