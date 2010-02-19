@@ -1,6 +1,6 @@
 from django import test
 from django.conf import settings
-from django.core import management
+from django.core import cache, management
 from django.core.handlers import wsgi
 from django.db.models import loading
 from django.utils.encoding import smart_unicode as unicode
@@ -47,6 +47,10 @@ class TestCase(test.TestCase):
     def __init__(self, *args, **kwargs):
         setup_test_environment()
         super(TestCase, self).__init__(*args, **kwargs)
+
+    def setUp(self):
+        cache.cache.clear()
+        settings.CACHE_COUNT_TIMEOUT = None
 
 
 class ExtraAppTestCase(TestCase):
