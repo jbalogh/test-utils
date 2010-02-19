@@ -11,9 +11,11 @@ from fabric.api import local, cd, env
 from fabric.contrib.project import rsync_project
 
 NAME = os.path.basename(os.path.dirname(__file__))
+ROOT = os.path.abspath(os.path.dirname(__file__))
 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'example-project.settings'
-os.environ['PYTHONPATH'] = os.path.abspath(os.path.dirname(__file__))
+os.environ['DJANGO_SETTINGS_MODULE'] = '%s.settings' % NAME
+os.environ['PYTHONPATH'] = os.pathsep.join([ROOT,
+                                            os.path.join(ROOT, 'examples')])
 
 env.hosts = ['jbalogh.me']
 
@@ -26,7 +28,7 @@ def doc(kind='html'):
 
 
 def test():
-    local('django-admin.py test')
+    local('django-admin.py test -s')
 
 
 def updoc():
