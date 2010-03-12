@@ -38,8 +38,7 @@ class SkipDatabaseCreation(mysql.DatabaseCreation):
             return test_database_name
 
         # Drop the db we just created, then do the normal setup.
-        cursor.execute("DROP DATABASE %s %s" %
-                       (qn(test_database_name), suffix))
+        cursor.execute("DROP DATABASE %s" % qn(test_database_name))
         return super(SkipDatabaseCreation, self)._create_test_db(
             verbosity, autoclobber)
 
