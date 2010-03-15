@@ -2,6 +2,7 @@ from django import test
 from django.conf import settings
 from django.core import cache, management
 from django.core.handlers import wsgi
+from django.db import connection, connections, DEFAULT_DB_ALIAS
 from django.db.models import loading
 from django.utils.encoding import smart_unicode as unicode
 from django.utils.translation.trans_real import to_language
@@ -51,6 +52,39 @@ class TestCase(test.TestCase):
     def setUp(self):
         cache.cache.clear()
         settings.CACHE_COUNT_TIMEOUT = None
+
+
+class TransactionTestCase(test.TransactionTestCase):
+    """
+    Subclass of ``django.test.TransactionTestCase`` that quickly tears down
+    fixtures and doesn't `flush` on setup.  This enables tests to be run in
+    any order.
+    """
+
+    def _fixture_setup(self):
+        """We omit the flush since it's slow and not needed since we propperly
+        tear down our fixtures."""
+        # If the test case has a multi_db=True flag, flush all databases.
+        # Otherwise, just flush default.
+        if getattr(self, 'multi_db', False):
+            databases = connections
+        else:
+            databases = [DEFAULT_DB_ALIAS]
+        for db in databases:
+            if hasattr(self, 'fixtures'):
+                # We have to use this slightly awkward syntax due to the fact
+                # that we're using *args and **kwargs together.
+                management.call_command('loaddata', *self.fixtures,
+                                        **{'verbosity': 0, 'database': db})
+
+    def _fixture_teardown(self):
+        """Executes a quick truncation of MySQL tables."""
+        cursor = connection.cursor()
+        cursor.execute('SET FOREIGN_KEY_CHECKS=0')
+        for table in connection.introspection.table_names():
+            cursor.execute('TRUNCATE `%s`' % table)
+
+        cursor.close()
 
 
 class ExtraAppTestCase(TestCase):
@@ -145,7 +179,7 @@ class RequestFactory(test.Client):
             'SERVER_NAME':       'testserver',
             'SERVER_PORT':       '80',
             'SERVER_PROTOCOL':   'HTTP/1.1',
-            'wsgi.version':      (1,0),
+            'wsgi.version':      (1, 0),
             'wsgi.url_scheme':   'http',
             'wsgi.errors':       self.errors,
             'wsgi.multiprocess': True,
