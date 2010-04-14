@@ -38,23 +38,25 @@ def setup_test_environment():
     jinja2.Template.render = instrumented_render
 
 
-# We want to import this TestCase so that the template_rendered signal gets
-# hooked up.
-class TestCase(test.TestCase):
-    """
-    Subclass of ``django.test.TestCase`` that sets up Jinja template hijacking.
-    """
+class BaseTestCase(object):
 
     def __init__(self, *args, **kwargs):
         setup_test_environment()
-        super(TestCase, self).__init__(*args, **kwargs)
+        super(BaseTestCase, self).__init__(*args, **kwargs)
 
     def setUp(self):
         cache.cache.clear()
         settings.CACHE_COUNT_TIMEOUT = None
+        settings.TEMPLATE_DEBUG = settings.DEBUG = False
 
 
-class TransactionTestCase(test.TransactionTestCase):
+class TestCase(BaseTestCase, test.TestCase):
+    """
+    Subclass of ``django.test.TestCase`` that sets up Jinja template hijacking.
+    """
+
+
+class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     """
     Subclass of ``django.test.TransactionTestCase`` that quickly tears down
     fixtures and doesn't `flush` on setup.  This enables tests to be run in
