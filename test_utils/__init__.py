@@ -10,6 +10,8 @@ from django.utils.translation.trans_real import to_language
 from nose.tools import eq_
 from nose import SkipTest
 
+from . import signals
+
 
 VERSION = (0, 3)
 __version__ = '.'.join(map(str, VERSION))
@@ -43,6 +45,16 @@ class BaseTestCase(object):
     def __init__(self, *args, **kwargs):
         setup_test_environment()
         super(BaseTestCase, self).__init__(*args, **kwargs)
+
+    def _pre_setup(self):
+        # allow others to prepare
+        signals.pre_setup.send(sender=self.__class__)
+        super(BaseTestCase, self)._pre_setup()
+
+    def _post_teardown(self):
+        super(BaseTestCase, self)._post_teardown()
+        # allow others to clean up
+        signals.post_teardown.send(sender=self.__class__)
 
     def setUp(self):
         cache.cache.clear()
