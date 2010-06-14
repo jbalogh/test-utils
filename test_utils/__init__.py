@@ -39,6 +39,12 @@ def setup_test_environment():
 
     jinja2.Template.render = instrumented_render
 
+    try:
+        from celery import conf
+        conf.ALWAYS_EAGER = True
+    except ImportError:
+        pass
+
 
 class BaseTestCase(object):
 
