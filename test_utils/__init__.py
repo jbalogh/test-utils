@@ -55,17 +55,15 @@ class BaseTestCase(object):
     def _pre_setup(self):
         # allow others to prepare
         signals.pre_setup.send(sender=self.__class__)
+        cache.cache.clear()
+        settings.CACHE_COUNT_TIMEOUT = None
+        settings.TEMPLATE_DEBUG = settings.DEBUG = False
         super(BaseTestCase, self)._pre_setup()
 
     def _post_teardown(self):
         super(BaseTestCase, self)._post_teardown()
         # allow others to clean up
         signals.post_teardown.send(sender=self.__class__)
-
-    def setUp(self):
-        cache.cache.clear()
-        settings.CACHE_COUNT_TIMEOUT = None
-        settings.TEMPLATE_DEBUG = settings.DEBUG = False
 
 
 class TestCase(BaseTestCase, test.TestCase):
