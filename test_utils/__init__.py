@@ -18,6 +18,7 @@ __version__ = '.'.join(map(str, VERSION))
 
 # We only want to run through setup_test_environment once.
 IS_SETUP = False
+TEST_UTILS_NO_TRUNCATE = set(getattr(settings, 'TEST_UTILS_NO_TRUNCATE', ()))
 
 
 def setup_test_environment():
@@ -99,7 +100,8 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
         """Executes a quick truncation of MySQL tables."""
         cursor = connection.cursor()
         cursor.execute('SET FOREIGN_KEY_CHECKS=0')
-        for table in connection.introspection.table_names():
+        table = connection.introspection.django_table_names()
+        for table in set(table) - TEST_UTILS_NO_TRUNCATE:
             cursor.execute('TRUNCATE `%s`' % table)
 
         cursor.close()
