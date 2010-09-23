@@ -46,6 +46,13 @@ def setup_test_environment():
     except ImportError:
         pass
 
+    try:
+        import async_signals
+        async_signals.stop_the_machine()
+        settings.ASYNC_SIGNALS = False
+    except ImportError:
+        pass
+
 
 class BaseTestCase(object):
 
