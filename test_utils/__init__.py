@@ -2,6 +2,7 @@ from django import test
 from django.conf import settings
 from django.core import cache, management
 from django.core.handlers import wsgi
+from django.core.management import call_command
 from django.db import connection, connections, DEFAULT_DB_ALIAS
 from django.db.models import loading
 from django.utils.encoding import smart_unicode as unicode
@@ -134,6 +135,12 @@ class ExtraAppTestCase(TestCase):
             loading.load_app(app)
 
         management.call_command('syncdb', verbosity=0, interactive=False)
+
+    def setUp(self):
+        super(ExtraAppTestCase, self).setUp()
+        if hasattr(self, 'fixtures'):
+            call_command('loaddata', *self.fixtures,
+                         **{'commit': False, 'verbosity': 0})
 
     @classmethod
     def teardown_class(cls):
