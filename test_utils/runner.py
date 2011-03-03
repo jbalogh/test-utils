@@ -1,5 +1,6 @@
 import os
 
+from django.conf import settings
 from django.core.management.commands.loaddata import Command
 from django.db import connections, DEFAULT_DB_ALIAS
 from django.db.backends.creation import TEST_DATABASE_PREFIX
@@ -66,9 +67,9 @@ class SkipDatabaseCreation(mysql.DatabaseCreation):
 
 class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
     """
-    This is a test runner that monkeypatches connection.creation to skip database
-    creation if it appears that the db already exists.  Your tests will run much
-    faster.
+    This is a test runner that monkeypatches connection.creation to skip
+    database creation if it appears that the db already exists.  Your tests
+    will run much faster.
 
     To force the normal database creation, define the environment variable
     ``FORCE_DB``.  It doesn't really matter what the value is, we just check to
@@ -85,3 +86,14 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
     def teardown_databases(self, old_config):
         if os.getenv('FORCE_DB'):
             super(RadicalTestSuiteRunner, self).teardown_databases(old_config)
+
+    def setup_test_environment(self, **kwargs):
+        super(RadicalTestSuiteRunner, self).setup_test_environment(**kwargs)
+
+        # If we have a settings_test.py let's roll it into our settings.
+        try:
+            import settings_test
+            settings.__dict__.update(settings_test.__dict__)
+        except ImportError:
+            pass
+
