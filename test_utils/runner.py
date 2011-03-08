@@ -93,7 +93,9 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
         # If we have a settings_test.py let's roll it into our settings.
         try:
             import settings_test
-            settings.__dict__.update(settings_test.__dict__)
+            # Use setattr to update Django's proxies:
+            for k in dir(settings_test):
+                setattr(settings, k, getattr(settings_test, k))
         except ImportError:
             pass
 
