@@ -88,8 +88,6 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
             super(RadicalTestSuiteRunner, self).teardown_databases(old_config)
 
     def setup_test_environment(self, **kwargs):
-        super(RadicalTestSuiteRunner, self).setup_test_environment(**kwargs)
-
         # If we have a settings_test.py let's roll it into our settings.
         try:
             import settings_test
@@ -98,4 +96,5 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
                 setattr(settings, k, getattr(settings_test, k))
         except ImportError:
             pass
+        super(RadicalTestSuiteRunner, self).setup_test_environment(**kwargs)
 
