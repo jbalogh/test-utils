@@ -106,10 +106,15 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     def _fixture_teardown(self):
         """Executes a quick truncation of MySQL tables."""
         cursor = connection.cursor()
-        cursor.execute('SET FOREIGN_KEY_CHECKS=0')
+        using_mysql = 'mysql' in connection.settings_dict['ENGINE']
+        if using_mysql:
+            cursor.execute('SET FOREIGN_KEY_CHECKS=0')
         table = connection.introspection.django_table_names()
         for table in set(table) - TEST_UTILS_NO_TRUNCATE:
-            cursor.execute('TRUNCATE `%s`' % table)
+            if using_mysql:
+                cursor.execute('TRUNCATE `%s`' % table)
+            else:
+                cursor.execute('DELETE FROM %s' % table)
 
         cursor.close()
 

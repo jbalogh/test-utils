@@ -1,4 +1,5 @@
 import os
+import warnings
 
 from django.conf import settings
 from django.core.management.commands.loaddata import Command
@@ -10,6 +11,7 @@ import django_nose
 
 
 # Monkey-patch loaddata to ignore foreign key checks.
+# The actual patch happens in setup_databases()
 _old_handle = Command.handle
 def _new_handle(self, *fixture_labels, **options):
     using = options.get('database', DEFAULT_DB_ALIAS)
@@ -26,7 +28,6 @@ def _new_handle(self, *fixture_labels, **options):
 
     if commit:
         connection.close()
-Command.handle = _new_handle
 
 
 # XXX: hard-coded to mysql.
@@ -77,10 +78,19 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
     """
 
     def setup_databases(self):
-        if not os.getenv('FORCE_DB'):
-            for alias in connections:
-                connection = connections[alias]
-                connection.creation.__class__ = SkipDatabaseCreation
+        using_mysql = False
+        for alias in connections:
+            connection = connections[alias]
+            if 'mysql' in connection.settings_dict['ENGINE']:
+                using_mysql = True
+            if not os.getenv('FORCE_DB'):
+                if using_mysql:
+                    connection.creation.__class__ = SkipDatabaseCreation
+                else:
+                    warnings.warn('NOT skipping db creation for %s' %
+                                  connection.settings_dict['ENGINE'])
+        if using_mysql:
+            Command.handle = _new_handle
         return super(RadicalTestSuiteRunner, self).setup_databases()
 
     def teardown_databases(self, old_config):
