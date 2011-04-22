@@ -4,6 +4,7 @@ from django.core import cache, management
 from django.core.handlers import wsgi
 from django.db import connection, connections, DEFAULT_DB_ALIAS
 from django.db.models import loading
+from django.test.client import RequestFactory as DjangoRequestFactory
 from django.utils.encoding import smart_unicode as unicode
 from django.utils.translation.trans_real import to_language
 
@@ -180,7 +181,7 @@ except ImportError:
     pass
 
 
-class RequestFactory(test.Client):
+class RequestFactory(DjangoRequestFactory):
     """
     Class that lets you create mock Request objects for use in testing.
 
@@ -190,37 +191,16 @@ class RequestFactory(test.Client):
         get_request = rf.get('/hello/')
         post_request = rf.post('/submit/', {'foo': 'bar'})
 
-    This class re-uses the django.test.client.Client interface, docs here:
-    http://www.djangoproject.com/documentation/testing/#the-test-client
-
     Once you have a request object you can pass it to any view function, just
     as if that view had been hooked up using a URLconf.
-
-    http://www.djangosnippets.org/snippets/963/
     """
-
-    def request(self, **request):
-        """Return the request object as soon as it's created."""
-        environ = {
-            'HTTP_COOKIE':      self.cookies,
-            'PATH_INFO':         '/',
-            'QUERY_STRING':      '',
-            'REMOTE_ADDR':       '127.0.0.1',
-            'REQUEST_METHOD':    'GET',
-            'SCRIPT_NAME':       '',
-            'SERVER_NAME':       'testserver',
-            'SERVER_PORT':       '80',
-            'SERVER_PROTOCOL':   'HTTP/1.1',
-            'wsgi.version':      (1, 0),
-            'wsgi.url_scheme':   'http',
-            'wsgi.errors':       self.errors,
-            'wsgi.multiprocess': True,
-            'wsgi.multithread':  False,
-            'wsgi.run_once':     False,
-        }
-        environ.update(self.defaults)
-        environ.update(request)
-        return wsgi.WSGIRequest(environ)
+    def _base_environ(self, **request):
+        # Add wsgi.input to base environ.
+        # TODO: upstream to django and delete this.
+        environ = super(RequestFactory, self)._base_environ(**request)
+        if 'wsgi.input' not in environ:
+            environ['wsgi.input'] = None
+        return environ
 
 
 # Comparisons
