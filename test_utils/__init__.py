@@ -77,12 +77,6 @@ class BaseTestCase(object):
         signals.post_teardown.send(sender=self.__class__)
 
 
-class TestCase(BaseTestCase, test.TestCase):
-    """
-    Subclass of ``django.test.TestCase`` that sets up Jinja template hijacking.
-    """
-
-
 class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     """
     Subclass of ``django.test.TransactionTestCase`` that quickly tears down
@@ -122,7 +116,7 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
         cursor.close()
 
 
-class FixtureReusingTestCase(test.TransactionTestCase):
+class FastFixtureTestCase(test.TransactionTestCase):
     """Test case that loads fixtures once and for all rather than once per test
 
     Using this can save huge swaths of time while still preserving test
@@ -137,6 +131,9 @@ class FixtureReusingTestCase(test.TransactionTestCase):
 
     Note that this is like Django's TestCase, not its TransactionTestCase, in
     that you cannot do your own commits or rollbacks from within tests.
+
+    For best speed, group tests using the same fixtures into as few classes as
+    possible.
 
     """
     @classmethod
@@ -206,9 +203,7 @@ class FixtureReusingTestCase(test.TransactionTestCase):
         # Repeat stuff from TransactionTestCase, because I'm not calling its
         # _pre_setup, because that would load fixtures again.
         cache.cache.clear()
-        settings.CACHE_COUNT_TIMEOUT = None
         settings.TEMPLATE_DEBUG = settings.DEBUG = False
-        signals.pre_setup.send(sender=self.__class__)
 
         test.testcases.disable_transaction_methods()
 
@@ -239,7 +234,8 @@ class FixtureReusingTestCase(test.TransactionTestCase):
         # http://code.djangoproject.com/ticket/7572, since we commit, not
         # rollback, the test fixtures and thus any cursor startup statements.
 
-        signals.post_teardown.send(sender=self.__class__)
+        # Don't call through to superclass, because that would call
+        # _fixture_teardown() and close the connection.
 
     @classmethod
     def _databases(cls):
@@ -247,6 +243,32 @@ class FixtureReusingTestCase(test.TransactionTestCase):
             return connections
         else:
             return [DEFAULT_DB_ALIAS]
+
+
+class TestCase(FastFixtureTestCase):
+    """``TestCase`` subclass providing fast fixtures and Mozilla specifics
+
+    Provides:
+        * Jinja template hijacking
+        * Signals for hooking setup and teardown
+        * A cache-machine timeout
+        * On-thread celery execution
+
+    """
+    def __init__(self, *args, **kwargs):
+        setup_test_environment()
+        super(TestCase, self).__init__(*args, **kwargs)
+
+    def _pre_setup(self):
+        """Adjust cache-machine settings, and send custom pre-setup signal."""
+        signals.pre_setup.send(sender=self.__class__)
+        settings.CACHE_COUNT_TIMEOUT = None
+        super(TestCase, self)._pre_setup()
+
+    def _post_teardown(self):
+        """Send custom post-teardown signal."""
+        super(TestCase, self)._post_teardown()
+        signals.post_teardown.send(sender=self.__class__)
 
 
 class ExtraAppTestCase(TestCase):
