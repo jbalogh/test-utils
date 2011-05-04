@@ -1,8 +1,9 @@
 from django import test
 from django.conf import settings
-from django.core import cache, management
+from django.core import cache, management, mail
 from django.core.handlers import wsgi
-from django.db import connection, connections, DEFAULT_DB_ALIAS
+from django.core.management import call_command
+from django.db import connection, connections, DEFAULT_DB_ALIAS, transaction
 from django.db.models import loading
 from django.test.client import RequestFactory as DjangoRequestFactory
 from django.utils.encoding import smart_unicode as unicode
@@ -12,6 +13,7 @@ from nose.tools import eq_
 from nose import SkipTest
 
 from . import signals
+from test_utils.fixture_tables import tables_used_by_fixtures
 
 
 VERSION = (0, 3)
@@ -75,12 +77,6 @@ class BaseTestCase(object):
         signals.post_teardown.send(sender=self.__class__)
 
 
-class TestCase(BaseTestCase, test.TestCase):
-    """
-    Subclass of ``django.test.TestCase`` that sets up Jinja template hijacking.
-    """
-
-
 class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     """
     Subclass of ``django.test.TransactionTestCase`` that quickly tears down
@@ -89,7 +85,7 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     """
 
     def _fixture_setup(self):
-        """We omit the flush since it's slow and not needed since we propperly
+        """We omit the flush since it's slow and not needed since we properly
         tear down our fixtures."""
         # If the test case has a multi_db=True flag, flush all databases.
         # Otherwise, just flush default.
@@ -118,6 +114,160 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
                 cursor.execute('DELETE FROM %s' % table)
 
         cursor.close()
+
+
+class FastFixtureTestCase(test.TransactionTestCase):
+    """Test case that loads fixtures once and for all rather than once per test
+
+    Using this can save huge swaths of time while still preserving test
+    isolation. Fixture data is loaded at class setup time, and the transaction
+    is committed. Commit and rollback methods are then monkeypatched away (like
+    in Django's standard TestCase), and each test is run. After each test, the
+    monkeypatching is temporarily undone, and a rollback is issued, returning
+    the DB content to the pristine fixture state. Finally, upon class teardown,
+    the DB is restored to a post-syncdb-like state by deleting the contents of
+    any table that had been touched by a fixture (keeping infrastructure tables
+    like django_content_type and auth_permission intact).
+
+    Note that this is like Django's TestCase, not its TransactionTestCase, in
+    that you cannot do your own commits or rollbacks from within tests.
+
+    For best speed, group tests using the same fixtures into as few classes as
+    possible.
+
+    """
+    @classmethod
+    def setup_class(cls):
+        """Turn on manual commits. Load and commit the fixtures."""
+        if not test.testcases.connections_support_transactions():
+            raise NotImplementedError('%s supports only DBs with transaction '
+                                      'capabilities.' % cls.__name__)
+        for db in cls._databases():
+            # These MUST be balanced with one leave_* each:
+            transaction.enter_transaction_management(using=db)
+            # Don't commit unless we say so:
+            transaction.managed(True, using=db)
+
+        cls._fixture_setup()
+
+    @classmethod
+    def teardown_class(cls):
+        """Truncate the world, and turn manual commit management back off."""
+        cls._fixture_teardown()
+        for db in cls._databases():
+            transaction.leave_transaction_management(using=db)
+
+    @classmethod
+    def _fixture_setup(cls):
+        """Load fixture data, and commit."""
+        for db in cls._databases():
+            if hasattr(cls, 'fixtures'):
+                call_command('loaddata', *cls.fixtures, **{'verbosity': 0,
+                                                           'commit': False,
+                                                           'database': db})
+            # No matter what, to preserve the effect of cursor start-up
+            # statements...
+            transaction.commit(using=db)
+
+    @classmethod
+    def _fixture_teardown(cls):
+        """Empty (only) the tables we loaded fixtures into, then commit."""
+        if hasattr(cls, 'fixtures'):
+            for db in cls._databases():
+                tables = tables_used_by_fixtures(cls.fixtures, using=db)
+                # TODO: Think about respecting _meta.db_tablespace, not just
+                # db_table.
+                if tables:
+                    connection = connections[db]
+                    cursor = connection.cursor()
+                    using_mysql = 'mysql' in connection.settings_dict['ENGINE']
+                    if using_mysql:
+                        cursor.execute('SET FOREIGN_KEY_CHECKS=0')
+                    for table in tables:
+                        if using_mysql:
+                            # Truncate implicitly commits.
+                            cursor.execute('TRUNCATE `%s`' % table)
+                        else:
+                            cursor.execute('DELETE FROM %s' % table)
+                    if using_mysql:
+                        # TODO: necessary?
+                        cursor.execute('SET FOREIGN_KEY_CHECKS=1')
+                transaction.commit(using=db)
+                # cursor.close()  # Should be unnecessary, since we committed
+                # any environment-setup statements that come with opening a new
+                # cursor when we committed the fixtures.
+
+    def _pre_setup(self):
+        """Disable transaction methods, and clear some globals."""
+        # Repeat stuff from TransactionTestCase, because I'm not calling its
+        # _pre_setup, because that would load fixtures again.
+        cache.cache.clear()
+        settings.TEMPLATE_DEBUG = settings.DEBUG = False
+
+        test.testcases.disable_transaction_methods()
+
+        #self._fixture_setup()
+        self._urlconf_setup()
+        mail.outbox = []
+
+        # Clear site cache in case somebody's mutated Site objects and then
+        # cached the mutated stuff:
+        from django.contrib.sites.models import Site
+        Site.objects.clear_cache()
+
+    def _post_teardown(self):
+        """Re-enable transaction methods, and roll back any changes.
+
+        Rollback clears any DB changes made by the test so the original fixture
+        data is again visible.
+
+        """
+        # Rollback any mutations made by tests:
+        test.testcases.restore_transaction_methods()
+        for db in self._databases():
+            transaction.rollback(using=db)
+
+        self._urlconf_teardown()
+
+        # We do not need to close the connection here to prevent
+        # http://code.djangoproject.com/ticket/7572, since we commit, not
+        # rollback, the test fixtures and thus any cursor startup statements.
+
+        # Don't call through to superclass, because that would call
+        # _fixture_teardown() and close the connection.
+
+    @classmethod
+    def _databases(cls):
+        if getattr(cls, 'multi_db', False):
+            return connections
+        else:
+            return [DEFAULT_DB_ALIAS]
+
+
+class TestCase(FastFixtureTestCase):
+    """``TestCase`` subclass providing fast fixtures and Mozilla specifics
+
+    Provides:
+        * Jinja template hijacking
+        * Signals for hooking setup and teardown
+        * A cache-machine timeout
+        * On-thread celery execution
+
+    """
+    def __init__(self, *args, **kwargs):
+        setup_test_environment()
+        super(TestCase, self).__init__(*args, **kwargs)
+
+    def _pre_setup(self):
+        """Adjust cache-machine settings, and send custom pre-setup signal."""
+        signals.pre_setup.send(sender=self.__class__)
+        settings.CACHE_COUNT_TIMEOUT = None
+        super(TestCase, self)._pre_setup()
+
+    def _post_teardown(self):
+        """Send custom post-teardown signal."""
+        super(TestCase, self)._post_teardown()
+        signals.post_teardown.send(sender=self.__class__)
 
 
 class ExtraAppTestCase(TestCase):
