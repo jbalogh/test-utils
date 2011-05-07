@@ -14,6 +14,7 @@ from nose import SkipTest
 
 from . import signals
 from test_utils.fixture_tables import tables_used_by_fixtures
+from test_utils.runner import uses_mysql
 
 
 VERSION = (0, 3)
@@ -103,7 +104,7 @@ class TransactionTestCase(BaseTestCase, test.TransactionTestCase):
     def _fixture_teardown(self):
         """Executes a quick truncation of MySQL tables."""
         cursor = connection.cursor()
-        using_mysql = 'mysql' in connection.settings_dict['ENGINE']
+        using_mysql = uses_mysql(connection)
         if using_mysql:
             cursor.execute('SET FOREIGN_KEY_CHECKS=0')
         table = connection.introspection.django_table_names()
@@ -181,8 +182,13 @@ class FastFixtureTestCase(test.TransactionTestCase):
                     connection = connections[db]
                     cursor = connection.cursor()
 
-                    using_mysql = 'mysql' in connection.settings_dict['ENGINE']
-                    if using_mysql:
+                    # TODO: Rather than assuming that anything added to by a
+                    # fixture can be emptied, remove only what the fixture
+                    # added. This would probably solve input.mozilla.com's
+                    # failures (since worked around) with Site objects; they
+                    # were loading additional Sites with a fixture, and then
+                    # the Django-provided example.com site was evaporating.
+                    if uses_mysql(connection):
                         cursor.execute('SET FOREIGN_KEY_CHECKS=0')
                         for table in tables:
                             # Truncate implicitly commits.

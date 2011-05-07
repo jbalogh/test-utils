@@ -10,24 +10,33 @@ from django.db.backends.mysql import creation as mysql
 import django_nose
 
 
-# Monkey-patch loaddata to ignore foreign key checks.
-# The actual patch happens in setup_databases()
+def uses_mysql(connection):
+    return 'mysql' in connection.settings_dict['ENGINE']
+
+
 _old_handle = Command.handle
 def _new_handle(self, *fixture_labels, **options):
+    """Wrap the the stock loaddata to ignore foreign key checks.
+
+    This is monkeypatched into place in setup_databases().
+
+    """
     using = options.get('database', DEFAULT_DB_ALIAS)
     commit = options.get('commit', True)
     connection = connections[using]
 
-    cursor = connection.cursor()
-    cursor.execute('SET foreign_key_checks = 0')
+    if uses_mysql(connection):
+        cursor = connection.cursor()
+        cursor.execute('SET foreign_key_checks = 0')
 
     _old_handle(self, *fixture_labels, **options)
 
-    cursor = connection.cursor()
-    cursor.execute('SET foreign_key_checks = 1')
+    if uses_mysql(connection):
+        cursor = connection.cursor()
+        cursor.execute('SET foreign_key_checks = 1')
 
-    if commit:
-        connection.close()
+        if commit:
+            connection.close()
 
 
 # XXX: hard-coded to mysql.
@@ -67,30 +76,27 @@ class SkipDatabaseCreation(mysql.DatabaseCreation):
 
 
 class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
-    """
-    This is a test runner that monkeypatches connection.creation to skip
+    """This is a test runner that monkeypatches connection.creation to skip
     database creation if it appears that the db already exists.  Your tests
     will run much faster.
 
     To force the normal database creation, define the environment variable
     ``FORCE_DB``.  It doesn't really matter what the value is, we just check to
     see if it's there.
-    """
 
+    """
     def setup_databases(self):
         using_mysql = False
         for alias in connections:
             connection = connections[alias]
-            if 'mysql' in connection.settings_dict['ENGINE']:
-                using_mysql = True
             if not os.getenv('FORCE_DB'):
-                if using_mysql:
+                if uses_mysql(connection):
                     connection.creation.__class__ = SkipDatabaseCreation
                 else:
                     warnings.warn('NOT skipping db creation for %s' %
                                   connection.settings_dict['ENGINE'])
-        if using_mysql:
-            Command.handle = _new_handle
+
+        Command.handle = _new_handle
         return super(RadicalTestSuiteRunner, self).setup_databases()
 
     def teardown_databases(self, old_config):
