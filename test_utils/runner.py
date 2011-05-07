@@ -1,10 +1,9 @@
 import os
-import warnings
 
 from django.conf import settings
+from django.core.management.color import no_style
 from django.core.management.commands.loaddata import Command
 from django.db import connections, DEFAULT_DB_ALIAS
-from django.db.backends.creation import TEST_DATABASE_PREFIX
 from django.db.backends.mysql import creation as mysql
 
 import django_nose
@@ -15,8 +14,9 @@ def uses_mysql(connection):
 
 
 _old_handle = Command.handle
-def _new_handle(self, *fixture_labels, **options):
-    """Wrap the the stock loaddata to ignore foreign key checks.
+def _foreign_key_ignoring_handle(self, *fixture_labels, **options):
+    """Wrap the the stock loaddata to ignore foreign key checks so we can load
+    circular references from fixtures.
 
     This is monkeypatched into place in setup_databases().
 
@@ -39,45 +39,24 @@ def _new_handle(self, *fixture_labels, **options):
             connection.close()
 
 
-# XXX: hard-coded to mysql.
 class SkipDatabaseCreation(mysql.DatabaseCreation):
+    """Database creation class that skips both creation and flushing
 
-    def _create_test_db(self, verbosity, autoclobber):
-        ### Oh yes, let's copy from django/db/backends/creation.py
-        suffix = self.sql_table_creation_suffix()
+    The idea is to re-use the perfectly good test DB already created by an
+    earlier test run, cutting the time spent before any tests run from 5-13
+    (depending on your I/O luck) down to 3.
 
-        if self.connection.settings_dict['TEST_NAME']:
-            test_database_name = self.connection.settings_dict['TEST_NAME']
-        else:
-            test_database_name = TEST_DATABASE_PREFIX + self.connection.settings_dict['NAME']
-        qn = self.connection.ops.quote_name
-
-        # Create the test database and connect to it. We need to autocommit
-        # if the database supports it because PostgreSQL doesn't allow
-        # CREATE/DROP DATABASE statements within transactions.
-        cursor = self.connection.cursor()
-        self.set_autocommit()
-
-        ### That's enough copying.
-
-        # If we couldn't create the test db, assume it already exists.
-        try:
-            cursor.execute("CREATE DATABASE %s %s" %
-                           (qn(test_database_name), suffix))
-        except Exception, e:
-            print '...Skipping setup of %s!' % test_database_name
-            print '...Try FORCE_DB=true if you need fresh databases.'
-            return test_database_name
-
-        # Drop the db we just created, then do the normal setup.
-        cursor.execute("DROP DATABASE %s" % qn(test_database_name))
-        return super(SkipDatabaseCreation, self)._create_test_db(
-            verbosity, autoclobber)
+    """
+    def create_test_db(self, verbosity=1, autoclobber=False):
+        # Notice that the DB supports transactions. Originally, this was done
+        # in the method this overrides.
+        self.connection.features.confirm()
+        return self._get_test_db_name()
 
 
 class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
     """This is a test runner that monkeypatches connection.creation to skip
-    database creation if it appears that the db already exists.  Your tests
+    database creation if it appears that the DB already exists.  Your tests
     will run much faster.
 
     To force the normal database creation, define the environment variable
@@ -86,22 +65,82 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
 
     """
     def setup_databases(self):
-        using_mysql = False
+        def should_create_database(connection):
+            """Return whether we should recreate the given DB.
+
+            This is true if the DB doesn't exist or if the FORCE_DB env var is
+            truthy.
+
+            """
+            # TODO: Notice when the Model classes change and return True. Worst
+            # case, we can generate sqlall and hash it, though it's a bit slow
+            # (2 secs) and hits the DB for no good reason. Until we find a
+            # faster way, I'm inclined to keep making people explicitly saying
+            # FORCE_DB if they want a new DB.
+
+            # Notice whether the DB exists, and create it if it doesn't:
+            try:
+                connection.cursor()
+            except StandardError:  # TODO: Be more discerning but still DB
+                                   # agnostic.
+                return True
+            return not not os.getenv('FORCE_DB')
+
+        def sql_reset_sequences(connection):
+            """Return a list of SQL statements needed to reset all sequences
+            for Django tables."""
+            # TODO: This is MySQL-specific--see below. It should also work with
+            # SQLite but not Postgres. :-(
+            tables = connection.introspection.django_table_names(
+                only_existing=True)
+            flush_statements = connection.ops.sql_flush(
+                no_style(), tables, connection.introspection.sequence_list())
+
+            # connection.ops.sequence_reset_sql() is not implemented for MySQL,
+            # and the base class just returns []. TODO: Implement it by pulling
+            # the relevant bits out of sql_flush().
+            return [s for s in flush_statements if s.startswith('ALTER')]
+            # Being overzealous and resetting the sequences on non-empty tables
+            # like django_content_type seems to be fine in MySQL: adding a row
+            # afterward does find the correct sequence number rather than
+            # crashing into an existing row.
+
         for alias in connections:
             connection = connections[alias]
-            if not os.getenv('FORCE_DB'):
-                if uses_mysql(connection):
-                    connection.creation.__class__ = SkipDatabaseCreation
-                else:
-                    warnings.warn('NOT skipping db creation for %s' %
-                                  connection.settings_dict['ENGINE'])
+            creation = connection.creation
+            test_db_name = creation._get_test_db_name()
 
-        Command.handle = _new_handle
+            # Mess with the DB name so other things operate on a test DB
+            # rather than the real one. This is done in create_test_db when
+            # we don't monkeypatch it away with SkipDatabaseCreation.
+            orig_db_name = connection.settings_dict['NAME']
+            connection.settings_dict['NAME'] = test_db_name
+
+            if not should_create_database(connection):
+                print ('Reusing old database "%s". Set env var FORCE_DB=1 if '
+                       'you need fresh DBs.' % test_db_name)
+
+                # Reset auto-increment sequences. Apparently, SUMO's tests are
+                # horrid and coupled to certain numbers.
+                cursor = connection.cursor()
+                for statement in sql_reset_sequences(connection):
+                    cursor.execute(statement)
+                connection.commit_unless_managed()  # which it is
+
+                creation.__class__ = SkipDatabaseCreation
+            else:
+                # We're not using SkipDatabaseCreation, so put the DB name
+                # back.
+                connection.settings_dict['NAME'] = orig_db_name
+
+        Command.handle = _foreign_key_ignoring_handle
+
+        # With our class patch, does nothing but return some connection
+        # objects:
         return super(RadicalTestSuiteRunner, self).setup_databases()
 
-    def teardown_databases(self, old_config):
-        if os.getenv('FORCE_DB'):
-            super(RadicalTestSuiteRunner, self).teardown_databases(old_config)
+    def teardown_databases(self, old_config, **kwargs):
+        """Leave those poor, reusable databases alone."""
 
     def setup_test_environment(self, **kwargs):
         # If we have a settings_test.py let's roll it into our settings.
@@ -113,4 +152,3 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
         except ImportError:
             pass
         super(RadicalTestSuiteRunner, self).setup_test_environment(**kwargs)
-
