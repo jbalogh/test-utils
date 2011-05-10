@@ -7,6 +7,7 @@ from django.db import connection, connections, DEFAULT_DB_ALIAS, transaction
 from django.db.models import loading
 from django.test.client import RequestFactory as DjangoRequestFactory
 from django.utils.encoding import smart_unicode as unicode
+from django.utils.translation import trans_real
 from django.utils.translation.trans_real import to_language
 
 from nose.tools import eq_
@@ -259,6 +260,7 @@ class TestCase(FastFixtureTestCase):
         * Signals for hooking setup and teardown
         * A cache-machine timeout
         * On-thread celery execution
+        * Deactivation of any l10n locales
 
     """
     def __init__(self, *args, **kwargs):
@@ -269,6 +271,8 @@ class TestCase(FastFixtureTestCase):
         """Adjust cache-machine settings, and send custom pre-setup signal."""
         signals.pre_setup.send(sender=self.__class__)
         settings.CACHE_COUNT_TIMEOUT = None
+        trans_real.deactivate()
+        trans_real._translations = {}  # Django fails to clear this cache.
         super(TestCase, self)._pre_setup()
 
     def _post_teardown(self):
