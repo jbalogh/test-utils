@@ -135,7 +135,8 @@ class FastFixtureTestCase(test.TransactionTestCase):
     that you cannot do your own commits or rollbacks from within tests.
 
     For best speed, group tests using the same fixtures into as few classes as
-    possible.
+    possible. Better still, don't do that, and instead use the fixture-bundling
+    plugin from django-nose, which does it dynamically at test time.
 
     """
     @classmethod
@@ -167,7 +168,10 @@ class FastFixtureTestCase(test.TransactionTestCase):
     def _fixture_setup(cls):
         """Load fixture data, and commit."""
         for db in cls._databases():
-            if hasattr(cls, 'fixtures'):
+            if (hasattr(cls, 'fixtures') and
+                getattr(cls, '_fb_should_setup_fixtures', True)):
+                # Iff the fixture-bundling test runner tells us we're the first
+                # suite having these fixtures, set them up:
                 call_command('loaddata', *cls.fixtures, **{'verbosity': 0,
                                                            'commit': False,
                                                            'database': db})
@@ -178,7 +182,10 @@ class FastFixtureTestCase(test.TransactionTestCase):
     @classmethod
     def _fixture_teardown(cls):
         """Empty (only) the tables we loaded fixtures into, then commit."""
-        if hasattr(cls, 'fixtures'):
+        if hasattr(cls, 'fixtures') and \
+           getattr(cls, '_fb_should_teardown_fixtures', True):
+            # If the fixture-bundling test runner advises us that the next test
+            # suite is going to reuse these fixtures, don't tear them down.
             for db in cls._databases():
                 tables = tables_used_by_fixtures(cls.fixtures, using=db)
                 # TODO: Think about respecting _meta.db_tablespace, not just
