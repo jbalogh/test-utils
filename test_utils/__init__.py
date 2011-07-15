@@ -273,6 +273,7 @@ class TestCase(FastFixtureTestCase):
         settings.CACHE_COUNT_TIMEOUT = None
         trans_real.deactivate()
         trans_real._translations = {}  # Django fails to clear this cache.
+        trans_real.activate(settings.LANGUAGE_CODE)
         super(TestCase, self)._pre_setup()
 
     def _post_teardown(self):
