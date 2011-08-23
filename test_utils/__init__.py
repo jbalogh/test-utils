@@ -139,7 +139,7 @@ class FastFixtureTestCase(test.TransactionTestCase):
 
     """
     @classmethod
-    def setup_class(cls):
+    def setUpClass(cls):
         """Turn on manual commits. Load and commit the fixtures."""
         if not test.testcases.connections_support_transactions():
             raise NotImplementedError('%s supports only DBs with transaction '
@@ -153,7 +153,7 @@ class FastFixtureTestCase(test.TransactionTestCase):
         cls._fixture_setup()
 
     @classmethod
-    def teardown_class(cls):
+    def tearDownClass(cls):
         """Truncate the world, and turn manual commit management back off."""
         cls._fixture_teardown()
         for db in cls._databases():
