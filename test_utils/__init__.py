@@ -282,7 +282,7 @@ class TestCase(FastFixtureTestCase):
         signals.post_teardown.send(sender=self.__class__)
 
 
-class ExtraAppTestCase(TestCase):
+class ExtraAppTestCase(FastFixtureTestCase):
     """
     ``TestCase`` subclass that lets you add extra apps just for testing.
 
@@ -296,15 +296,15 @@ class ExtraAppTestCase(TestCase):
     extra_apps = []
 
     @classmethod
-    def setup_class(cls):
+    def setUpClass(cls):
         for app in cls.extra_apps:
             settings.INSTALLED_APPS += (app,)
             loading.load_app(app)
-
         management.call_command('syncdb', verbosity=0, interactive=False)
+        super(ExtraAppTestCase, cls).setUpClass()
 
     @classmethod
-    def teardown_class(cls):
+    def tearDownClass(cls):
         # Remove the apps from extra_apps.
         for app_label in cls.extra_apps:
             app_name = app_label.split('.')[-1]
@@ -314,6 +314,7 @@ class ExtraAppTestCase(TestCase):
 
         apps = set(settings.INSTALLED_APPS).difference(cls.extra_apps)
         settings.INSTALLED_APPS = tuple(apps)
+        super(ExtraAppTestCase, cls).tearDownClass()
 
 
 try:
