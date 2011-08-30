@@ -157,7 +157,10 @@ class FastFixtureTestCase(test.TransactionTestCase):
         """Truncate the world, and turn manual commit management back off."""
         cls._fixture_teardown()
         for db in cls._databases():
-            transaction.commit(using=db)
+            # Finish off any transactions that may have happened in
+            # tearDownClass in a child method.
+            if transaction.is_dirty(using=db):
+                transaction.commit(using=db)
             transaction.leave_transaction_management(using=db)
 
     @classmethod
