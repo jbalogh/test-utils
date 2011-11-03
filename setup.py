@@ -10,7 +10,7 @@ setup(
     author_email='jbalogh@mozilla.com',
     url='http://github.com/jbalogh/test-utils',
     license='BSD',
-    packages=['test_utils'],
+    packages=['krux_test_utils'],
     include_package_data=True,
     zip_safe=False,
     install_requires=['nose'],
