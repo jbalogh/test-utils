@@ -143,6 +143,10 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
         """Leave those poor, reusable databases alone."""
 
     def setup_test_environment(self, **kwargs):
+        # Give us a way to denote that we're in a test environment so we
+        # can more easily pick the right db, indexes, ...
+        os.environ['DJANGO_ENVIRONMENT'] = 'test'
+
         # If we have a settings_test.py let's roll it into our settings.
         try:
             import settings_test
