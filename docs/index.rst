@@ -15,13 +15,13 @@ our Django, Jinja2, and nose setup.
 Test environment
 ================
 
-``test_utils`` sets an environment variable ``DJANGO_ENVIRONMENT`` and sets
+``test_utils`` sets an environment variable ``TESTS_RUNNING`` and sets
 it to ``'test'``.  This makes it easier to know you're in a test situation
 when writing code and to do something different.
 
 Example::
 
-    if os.environ.get('DJANGO_ENVIRONMENT') == 'test':
+    if os.environ.get('TESTS_RUNNING') == 'true':
         # do a test thing
     else:
         # do a non-test thing
