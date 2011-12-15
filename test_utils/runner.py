@@ -84,7 +84,8 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
             except StandardError:  # TODO: Be more discerning but still DB
                                    # agnostic.
                 return True
-            return os.getenv('FORCE_DB', 'false').lower() != 'false'
+            return (os.getenv('FORCE_DB', 'false').lower()
+                    not in ('false', '0', ''))
 
         def sql_reset_sequences(connection):
             """Return a list of SQL statements needed to reset all sequences
