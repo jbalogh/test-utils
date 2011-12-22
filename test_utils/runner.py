@@ -84,6 +84,11 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
             except StandardError:  # TODO: Be more discerning but still DB
                                    # agnostic.
                 return True
+
+            # if running sqlite in-memory, always create tables
+            if connection.settings_dict.get('NAME') == ':memory:':
+                return True
+
             return (os.getenv('FORCE_DB', 'false').lower()
                     not in ('false', '0', ''))
 
@@ -149,6 +154,9 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
             import settings_test
             # Use setattr to update Django's proxies:
             for k in dir(settings_test):
+                if k.startswith('_'):
+                    # don't drag in things like `__builtins__`
+                    continue
                 setattr(settings, k, getattr(settings_test, k))
         except ImportError:
             pass
