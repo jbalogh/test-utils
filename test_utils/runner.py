@@ -153,3 +153,15 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
         except ImportError:
             pass
         super(RadicalTestSuiteRunner, self).setup_test_environment(**kwargs)
+
+
+class NoDBTestSuiterunner(django_nose.NoseTestSuiteRunner):
+    """A test suite runner that does not set up and tear down a database."""
+
+    def setup_databases(self):
+        """I don't want databases"""
+        pass
+
+    def teardown_databases(self, *args):
+        """Let's teardown inexistant databases"""
+        pass
