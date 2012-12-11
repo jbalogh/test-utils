@@ -17,6 +17,12 @@ from . import signals
 from test_utils.fixture_tables import tables_used_by_fixtures
 from test_utils.runner import uses_mysql
 
+HAS_JINJA2 = True
+try:
+    import jinja2
+except ImportError:
+    HAS_JINJA2 = False
+
 
 VERSION = (0, 3)
 __version__ = '.'.join(map(str, VERSION))
@@ -33,17 +39,16 @@ def setup_test_environment():
         return
     IS_SETUP = True
 
-    # Import here so it's not required to install test-utils.
-    import jinja2
-    old_render = jinja2.Template.render
+    if HAS_JINJA2:
+        old_render = jinja2.Template.render
 
-    def instrumented_render(self, *args, **kwargs):
-        context = dict(*args, **kwargs)
-        test.signals.template_rendered.send(sender=self, template=self,
-                                            context=context)
-        return old_render(self, *args, **kwargs)
+        def instrumented_render(self, *args, **kwargs):
+            context = dict(*args, **kwargs)
+            test.signals.template_rendered.send(sender=self, template=self,
+                                                context=context)
+            return old_render(self, *args, **kwargs)
 
-    jinja2.Template.render = instrumented_render
+        jinja2.Template.render = instrumented_render
 
     try:
         from celery.app import current_app
