@@ -226,6 +226,7 @@ class FastFixtureTestCase(test.TransactionTestCase):
         test.testcases.disable_transaction_methods()
 
         #self._fixture_setup()
+        self.client = self.client_class()
         self._urlconf_setup()
         mail.outbox = []
 
