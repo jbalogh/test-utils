@@ -234,6 +234,7 @@ class FastFixtureTestCase(test.TransactionTestCase):
         self.client = self.client_class()
         self._urlconf_setup()
         mail.outbox = []
+        self.client = self.client_class()
 
         # Clear site cache in case somebody's mutated Site objects and then
         # cached the mutated stuff:
