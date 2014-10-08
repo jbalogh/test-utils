@@ -2,15 +2,21 @@
 loading any data, it returns the tables referenced by a set of fixtures so we
 can truncate them (and no others) quickly after we're finished with them."""
 
-import os
 import gzip
+import os
 import zipfile
-
 from django.conf import settings
 from django.core import serializers
-from django.db import router, DEFAULT_DB_ALIAS
+from django.db import DEFAULT_DB_ALIAS, router
 from django.db.models import get_apps
-from django.utils.itercompat import product
+
+# Remove this try/except block if the minimum Python version suported is 2.6
+# as `product` was added in Python 2.6.
+try:
+    from itertools import product
+except ImportError:
+    # Deprecated in 1.5, removed in 1.7.
+    from django.utils.itercompat import product
 
 try:
     import bz2
@@ -38,9 +44,9 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
             return zipfile.ZipFile.read(self, self.namelist()[0])
 
     compression_types = {
-        None:   file,
-        'gz':   gzip.GzipFile,
-        'zip':  SingleZipReader
+        None: file,
+        'gz': gzip.GzipFile,
+        'zip': SingleZipReader
     }
     if has_bz2:
         compression_types['bz2'] = bz2.BZ2File
