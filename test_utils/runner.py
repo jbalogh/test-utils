@@ -47,7 +47,7 @@ class SkipDatabaseCreation(mysql.DatabaseCreation):
     (depending on your I/O luck) down to 3.
 
     """
-    def create_test_db(self, verbosity=1, autoclobber=False):
+    def create_test_db(self, verbosity=1, autoclobber=False, **kwargs):
         # Notice that the DB supports transactions. Originally, this was done
         # in the method this overrides. The confirm method was added in Django
         # v1.3 (https://code.djangoproject.com/ticket/12991) but removed in
