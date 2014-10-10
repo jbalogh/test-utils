@@ -1,7 +1,6 @@
 from django import test
 from django.conf import settings
 from django.core import cache, management, mail
-from django.core.handlers import wsgi
 from django.core.management import call_command
 from django.db import connection, connections, DEFAULT_DB_ALIAS, transaction
 from django.db.models import loading
@@ -230,7 +229,6 @@ class FastFixtureTestCase(test.TransactionTestCase):
 
         test.testcases.disable_transaction_methods()
 
-        #self._fixture_setup()
         self.client = self.client_class()
         self._urlconf_setup()
         mail.outbox = []
@@ -326,8 +324,17 @@ class ExtraAppTestCase(FastFixtureTestCase):
         for app_label in cls.extra_apps:
             app_name = app_label.split('.')[-1]
             app = loading.cache.get_app(app_name)
-            del loading.cache.app_models[app_name]
-            del loading.cache.app_store[app]
+            try:
+                # Django <= 1.6.
+                del loading.cache.app_models[app_name]
+            except AttributeError:
+                # Django 1.7+.
+                del loading.cache.all_models[app_name]
+            try:
+                # Django <= 1.6.
+                del loading.cache.app_store[app]
+            except AttributeError:
+                pass
 
         apps = set(settings.INSTALLED_APPS).difference(cls.extra_apps)
         settings.INSTALLED_APPS = tuple(apps)
