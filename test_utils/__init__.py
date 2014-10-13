@@ -73,7 +73,7 @@ class BaseTestCase(object):
         # allow others to prepare
         signals.pre_setup.send(sender=self.__class__)
         cache.cache.clear()
-        settings.CACHE_COUNT_TIMEOUT = None
+        settings.CACHE_COUNT_TIMEOUT = -1
         settings.TEMPLATE_DEBUG = settings.DEBUG = False
         super(BaseTestCase, self)._pre_setup()
 
@@ -224,6 +224,7 @@ class FastFixtureTestCase(test.TransactionTestCase):
         """Disable transaction methods, and clear some globals."""
         # Repeat stuff from TransactionTestCase, because I'm not calling its
         # _pre_setup, because that would load fixtures again.
+        self.client = self.client_class()
         cache.cache.clear()
         settings.TEMPLATE_DEBUG = settings.DEBUG = False
 
@@ -285,7 +286,7 @@ class TestCase(FastFixtureTestCase):
     def _pre_setup(self):
         """Adjust cache-machine settings, and send custom pre-setup signal."""
         signals.pre_setup.send(sender=self.__class__)
-        settings.CACHE_COUNT_TIMEOUT = None
+        settings.CACHE_COUNT_TIMEOUT = -1
         trans_real.deactivate()
         trans_real._translations = {}  # Django fails to clear this cache.
         trans_real.activate(settings.LANGUAGE_CODE)

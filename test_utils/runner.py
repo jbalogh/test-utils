@@ -60,7 +60,6 @@ class SkipDatabaseCreation(mysql.DatabaseCreation):
             # Django v1.2 and lower
             rollback = self._rollback_works()
             self.connection.settings_dict['SUPPORTS_TRANSACTIONS'] = rollback
-
         return self._get_test_db_name()
 
 
