@@ -33,7 +33,7 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
     fixture_count = 0
     loaded_object_count = 0
     fixture_object_count = 0
-    tables = set()
+    tables = []
 
     class SingleZipReader(zipfile.ZipFile):
         def __init__(self, *args, **kwargs):
@@ -129,7 +129,7 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
                                 objects_in_fixture += 1
                                 if router.allow_syncdb(using, obj.object.__class__):
                                     loaded_objects_in_fixture += 1
-                                    tables.add(
+                                    tables.append(
                                         obj.object.__class__._meta.db_table)
                             loaded_object_count += loaded_objects_in_fixture
                             fixture_object_count += objects_in_fixture
@@ -158,4 +158,6 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
                     # fixture_name, humanize(fixture_dir)))
                     pass
 
-    return tables
+    # Return tables in reverse so that fixture deleting works as expected
+    # if you have foreign keys enabled (like for PostgreSQL).
+    return tables.reverse()
