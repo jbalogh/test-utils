@@ -130,15 +130,6 @@ class RadicalTestSuiteRunner(django_nose.NoseTestSuiteRunner):
             if not should_create_database(connection):
                 print ('Reusing old database "%s". Set env var FORCE_DB=1 if '
                        'you need fresh DBs.' % test_db_name)
-
-                if getattr(settings, 'SQL_RESET_SEQUENCES', True):
-                    # Reset auto-increment sequences. Apparently, SUMO's tests
-                    # are horrid and coupled to certain numbers.
-                    cursor = connection.cursor()
-                    for statement in sql_reset_sequences(connection):
-                        cursor.execute(statement)
-                    connection.commit_unless_managed()  # which it is
-
                 creation.__class__ = SkipDatabaseCreation
             else:
                 # We're not using SkipDatabaseCreation, so put the DB name
