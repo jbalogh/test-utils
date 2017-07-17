@@ -1,2 +1,5 @@
 docs/_build
 *.py[co]
+venv/
+.tox/
+*.egg-info/

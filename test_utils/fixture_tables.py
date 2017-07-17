@@ -8,7 +8,12 @@ import zipfile
 from django.conf import settings
 from django.core import serializers
 from django.db import DEFAULT_DB_ALIAS, router
-from django.db.models import get_apps
+try:
+    from django.db.models import get_apps
+    get_all_apps = get_apps
+except ImportError:
+    from django.apps import apps
+    get_all_apps = apps.get_models
 
 # Remove this try/except block if the minimum Python version suported is 2.6
 # as `product` was added in Python 2.6.
@@ -40,6 +45,7 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
             zipfile.ZipFile.__init__(self, *args, **kwargs)
             if settings.DEBUG:
                 assert len(self.namelist()) == 1, "Zip-compressed fixtures must contain only one file."
+
         def read(self):
             return zipfile.ZipFile.read(self, self.namelist()[0])
 
@@ -52,7 +58,7 @@ def tables_used_by_fixtures(fixture_labels, using=DEFAULT_DB_ALIAS):
         compression_types['bz2'] = bz2.BZ2File
 
     app_module_paths = []
-    for app in get_apps():
+    for app in get_all_apps():
         if hasattr(app, '__path__'):
             # It's a 'models/' subpackage
             for path in app.__path__:

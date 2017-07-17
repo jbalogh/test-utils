@@ -1,11 +1,18 @@
+from __future__ import absolute_import
 from django import test
 from django.conf import settings
 from django.core import cache, management, mail
 from django.core.management import call_command
 from django.db import connection, connections, DEFAULT_DB_ALIAS, transaction
-from django.db.models import loading
+try:
+    from django.db.models import loading
+except ImportError:
+    from django.apps import apps as loading
 from django.test.client import RequestFactory as DjangoRequestFactory
-from django.utils.encoding import smart_unicode as unicode
+try:
+    from django.utils.encoding import smart_unicode as unicode
+except ImportError:
+    from django.utils.encoding import smart_text as unicode
 from django.utils.translation import trans_real
 from django.utils.translation.trans_real import to_language
 

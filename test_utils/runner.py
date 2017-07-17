@@ -14,6 +14,8 @@ def uses_mysql(connection):
 
 
 _old_handle = Command.handle
+
+
 def _foreign_key_ignoring_handle(self, *fixture_labels, **options):
     """Wrap the the stock loaddata to ignore foreign key checks so we can load
     circular references from fixtures.
